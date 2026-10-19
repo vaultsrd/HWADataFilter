@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HWA Data Filter</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    :root {
+      --accent: #1bcfb4;
+      --accent-dark: #087f70;
+      --bg: #f4f7fb;
+      --panel: #ffffff;
+      --text: #202938;
+      --muted: #738096;
+      --border: #e4eaf1;
+      --shadow: 0 12px 34px rgba(25, 42, 70, .07);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+    }
+    .app { max-width: 1500px; margin: 0 auto; padding: 28px; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:24px; }
+    .brand { display:flex; align-items:center; gap:13px; }
+    .logo { display:grid; place-items:center; width:48px; height:48px; border-radius:14px; background:var(--accent); color:#073d36; font-size:23px; font-weight:900; }
+    h1 { font-size: clamp(22px, 3vw, 30px); margin:0; letter-spacing:-.7px; }
+    .subtitle { color:var(--muted); font-size:13px; margin-top:5px; }
+    .pill { border:1px solid #b6eee5; color:var(--accent-dark); background:#eafffb; border-radius:999px; padding:7px 12px; font-size:12px; font-weight:750; white-space:nowrap; }
+    .panel { background:var(--panel); border:1px solid var(--border); border-radius:18px; box-shadow:var(--shadow); }
+    .upload-panel { padding:22px; margin-bottom:20px; }
+    .dropzone {
+      border:2px dashed #b8e9e2; border-radius:15px; background:#f8fffd;
+      min-height:190px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      text-align:center; padding:24px; transition:.2s ease; cursor:pointer;
+    }
+    .dropzone.dragover { border-color:var(--accent); background:#eafffb; transform:scale(1.003); }
+    .upload-icon { width:54px; height:54px; border-radius:16px; display:grid; place-items:center; background:#d9faf4; color:#087f70; font-size:27px; margin-bottom:12px; }
+    .dropzone strong { font-size:16px; }
+    .dropzone p { color:var(--muted); margin:7px 0 14px; font-size:13px; }
+    .btn { border:0; border-radius:10px; padding:10px 15px; font-size:13px; font-weight:750; cursor:pointer; transition:.15s; }
+    .btn-primary { background:var(--accent); color:#073d36; }
+    .btn-primary:hover { background:#10bfa5; }
+    .btn-secondary { background:#eef2f7; color:#354052; }
+    .btn:disabled { opacity:.45; cursor:not-allowed; }
+    #fileInput { display:none; }
+    .file-info { display:none; margin-top:14px; color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
+    .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:20px; }
+    .stat { padding:18px 20px; }
+    .stat-label { color:var(--muted); font-size:12px; font-weight:650; margin-bottom:9px; }
+    .stat-value { font-size:27px; font-weight:800; letter-spacing:-.5px; }
+    .stat-value.accent { color:var(--accent-dark); }
+    .stat-note { color:var(--muted); font-size:11px; margin-top:5px; }
+    .results { overflow:hidden; }
+    .results-head { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:20px 22px; border-bottom:1px solid var(--border); }
+    .results-head h2 { margin:0; font-size:17px; }
+    .results-head p { color:var(--muted); font-size:12px; margin:5px 0 0; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .table-tools { padding:14px 22px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); }
+    .sort-actions { align-items:center; }
+    .sort-actions .btn.active { background:#d9faf4; color:#087f70; box-shadow:inset 0 0 0 1px #8ce4d7; }
+    .search { width:min(360px,100%); border:1px solid var(--border); border-radius:10px; padding:10px 12px; outline:none; font:inherit; font-size:13px; }
+    .search:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(27,207,180,.13); }
+    .count { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .table-wrap { width:100%; overflow:auto; max-height:62vh; }
+    table { border-collapse:separate; border-spacing:0; width:100%; min-width:1000px; font-size:12px; }
+    thead th { position:sticky; top:0; z-index:1; background:var(--accent); color:#073d36; text-align:left; padding:13px 14px; font-size:11px; letter-spacing:.15px; white-space:normal; overflow-wrap:anywhere; border-bottom:1px solid rgba(0,0,0,.06); }
+    tbody td { padding:12px 14px; border-bottom:1px solid #edf1f5; white-space:normal; overflow-wrap:anywhere; word-break:normal; vertical-align:middle; min-width:100px; max-width:420px; }
+    tbody tr:nth-child(even) { background:#fbfcfe; }
+    tbody tr:hover { background:#edfcf9; }
+    .empty { padding:48px 20px; text-align:center; color:var(--muted); }
+    .table-footer-actions { display:flex; justify-content:flex-end; padding:16px 22px; border-top:1px solid var(--border); background:#fff; }
+    .capture-stage { position:fixed; left:-100000px; top:0; z-index:-1; background:#fff; padding:24px; width:max-content; max-width:none; }
+    .capture-stage table { width:auto; min-width:1100px; max-width:none; table-layout:auto; border-collapse:collapse; font-size:13px; }
+    .capture-stage th { background:#1bcfb4; color:#073d36; text-align:left; padding:12px 14px; border:1px solid #b7dcd6; white-space:normal; overflow-wrap:anywhere; word-break:normal; }
+    .capture-stage td { padding:10px 14px; border:1px solid #dfe8e7; white-space:normal; overflow-wrap:anywhere; word-break:normal; vertical-align:middle; max-width:480px; }
+    .capture-stage tr:nth-child(even) td { background:#f5fbfa; }
+    .empty .empty-icon { font-size:30px; margin-bottom:10px; }
+    .footer { color:var(--muted); text-align:center; font-size:11px; margin-top:18px; }
+    .message { display:none; border-radius:10px; padding:11px 13px; font-size:13px; margin-top:12px; }
+    .message.error { display:block; color:#9b2c2c; background:#fff0f0; border:1px solid #ffd6d6; }
+    .message.success { display:block; color:#126b5f; background:#eafffb; border:1px solid #b6eee5; }
+    @media (max-width:700px) {
+      .app { padding:16px; }
+      .topbar { align-items:flex-start; }
+      .pill { display:none; }
+      .stats { grid-template-columns:1fr; gap:10px; }
+      .stat { padding:15px 17px; }
+      .stat-value { font-size:23px; }
+      .results-head, .table-tools { align-items:stretch; flex-direction:column; }
+      .actions { width:100%; }
+      .sort-actions { flex-direction:column; align-items:stretch; }
+      .sort-actions .btn { width:100%; }
+      .actions .btn { flex:1; }
+      .upload-panel { padding:14px; }
+      .dropzone { min-height:170px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">H</div>
+        <div>
+          <h1>HWA Data Filter</h1>
+          <div class="subtitle">Excel Processing Tool · Filter otomatis package_cat = HWA</div>
+        </div>
+      </div>
+      <div class="pill">● Pemrosesan lokal di browser</div>
+    </header>
+
+    <section class="panel upload-panel">
+      <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Unggah file Excel">
+        <div class="upload-icon">⇧</div>
+        <strong>Upload atau tarik file Excel ke sini</strong>
+        <p>Format yang didukung: .xlsx, .xls, .xlsm, dan .csv</p>
+        <button type="button" class="btn btn-primary" id="chooseBtn">Pilih File Excel</button>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.xlsm,.csv">
+      </div>
+      <div class="file-info" id="fileInfo"></div>
+      <div id="message" class="message"></div>
+    </section>
+
+    <section class="stats" aria-label="Ringkasan data">
+      <div class="panel stat">
+        <div class="stat-label">TOTAL BARIS SUMBER</div>
+        <div class="stat-value" id="totalRows">—</div>
+        <div class="stat-note">Jumlah data yang dibaca dari sheet</div>
+      </div>
+      <div class="panel stat">
+        <div class="stat-label">BARIS DENGAN PACKAGE HWA</div>
+        <div class="stat-value accent" id="hwaRows">—</div>
+        <div class="stat-note">Hasil filter package_cat = HWA</div>
+      </div>
+      <div class="panel stat">
+        <div class="stat-label">KOLOM OUTPUT</div>
+        <div class="stat-value">7</div>
+        <div class="stat-note">Kolom ditampilkan sesuai urutan yang ditentukan</div>
+      </div>
+    </section>
+
+    <section class="panel results">
+      <div class="results-head">
+        <div>
+          <h2>Hasil Filter HWA</h2>
+          <p>Data yang ditampilkan hanya tujuh kolom output yang diperlukan.</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-secondary" id="copyBtn" disabled>Salin Tabel</button>
+          <button class="btn btn-primary" id="exportBtn" disabled>Ekspor Excel</button>
+        </div>
+      </div>
+      <div class="table-tools">
+        <div class="actions sort-actions">
+          <button class="btn btn-secondary" id="wokAscBtn" disabled>WOK ↑ Ascending</button>
+          <button class="btn btn-secondary" id="wokDescBtn" disabled>WOK ↓ Descending</button>
+          <button class="btn btn-secondary" id="resetSortBtn" disabled>↺ Reset Urutan</button>
+        </div>
+        <input id="searchInput" class="search" type="search" placeholder="Cari di hasil tabel..." disabled>
+        <div class="count" id="shownCount">Belum ada data</div>
+      </div>
+      <div class="table-wrap" id="tableWrap">
+        <div class="empty">
+          <div class="empty-icon">▤</div>
+          <strong>Belum ada file yang diproses</strong>
+          <div style="margin-top:7px;font-size:12px">Unggah file Excel untuk menampilkan hasil filter.</div>
+        </div>
+      </div>
+      <div class="table-footer-actions">
+        <button class="btn btn-primary" id="copyImageBtn" disabled>▧ Salin Tabel sebagai Gambar</button>
+      </div>
+    </section>
+    <div class="footer">HWA Data Filter · File diproses di browser Anda dan tidak diunggah ke server.</div>
+  </main>
+
+  <script>
+    const OUTPUT_COLUMNS = [
+      "order_id",
+      "sto_co",
+      "wok",
+      "product_commercial_name",
+      "fallout_reason",
+      "channel_name",
+      "sf_code"
+    ];
+
+    const fileInput = document.getElementById("fileInput");
+    const dropzone = document.getElementById("dropzone");
+    const chooseBtn = document.getElementById("chooseBtn");
+    const fileInfo = document.getElementById("fileInfo");
+    const message = document.getElementById("message");
+    const tableWrap = document.getElementById("tableWrap");
+    const searchInput = document.getElementById("searchInput");
+    const copyBtn = document.getElementById("copyBtn");
+    const copyImageBtn = document.getElementById("copyImageBtn");
+    const exportBtn = document.getElementById("exportBtn");
+    const wokAscBtn = document.getElementById("wokAscBtn");
+    const wokDescBtn = document.getElementById("wokDescBtn");
+    const resetSortBtn = document.getElementById("resetSortBtn");
+
+    let sourceRows = [];
+    let filteredRows = [];
+    let outputRows = [];
+    let currentFileName = "";
+    let wokSortDirection = null; // null = urutan asli, asc = ascending, desc = descending
+
+    function normalizeHeader(value) {
+      return String(value ?? "").replace(/^\uFEFF/, "").trim().toLowerCase();
+    }
+
+    function showMessage(text, type) {
+      message.textContent = text;
+      message.className = "message " + type;
+    }
+
+    function clearMessage() {
+      message.textContent = "";
+      message.className = "message";
+    }
+
+    function getCell(row, wantedName) {
+      const wanted = normalizeHeader(wantedName);
+      const actualKey = Object.keys(row).find(key => normalizeHeader(key) === wanted);
+      return actualKey === undefined ? "" : (row[actualKey] ?? "");
+    }
+
+    function formatValue(value) {
+      if (value === null || value === undefined) return "";
+      if (value instanceof Date) return value.toLocaleDateString("id-ID");
+      return String(value);
+    }
+
+    async function processFile(file) {
+      if (!file) return;
+      clearMessage();
+
+      const allowed = /\.(xlsx|xls|xlsm|csv)$/i.test(file.name);
+      if (!allowed) {
+        showMessage("Format file tidak didukung. Silakan pilih file .xlsx, .xls, .xlsm, atau .csv.", "error");
+        return;
+      }
+
+      currentFileName = file.name;
+      fileInfo.style.display = "block";
+      fileInfo.textContent = "Memproses: " + file.name + " …";
+
+      try {
+        const buffer = await file.arrayBuffer();
+        let workbook;
+        if (/\.csv$/i.test(file.name)) {
+          const textData = new TextDecoder("utf-8").decode(buffer);
+          workbook = XLSX.read(textData, { type: "string" });
+        } else {
+          workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+        }
+
+        if (!workbook.SheetNames.length) throw new Error("File tidak memiliki sheet yang dapat dibaca.");
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+
+        if (!rows.length) {
+          sourceRows = [];
+          outputRows = [];
+          document.getElementById("totalRows").textContent = "0";
+          document.getElementById("hwaRows").textContent = "0";
+          copyBtn.disabled = true; copyImageBtn.disabled = true; exportBtn.disabled = true; searchInput.disabled = true;
+          renderTable([]);
+          showMessage("Sheet pertama kosong atau tidak memiliki baris data.", "error");
+          return;
+        }
+
+        const headerKeys = Object.keys(rows[0]).map(normalizeHeader);
+        const missing = ["package_cat", ...OUTPUT_COLUMNS].filter(name => !headerKeys.includes(normalizeHeader(name)));
+        if (missing.length) {
+          throw new Error("Kolom wajib tidak ditemukan: " + missing.join(", ") + ". Pastikan nama header sesuai dan berada di baris pertama sheet.");
+        }
+
+        sourceRows = rows;
+        filteredRows = rows.filter(row => String(getCell(row, "package_cat")).trim().toUpperCase() === "HWA");
+        outputRows = filteredRows.map((row, originalIndex) => {
+          const result = {};
+          OUTPUT_COLUMNS.forEach(column => result[column] = getCell(row, column));
+          result.__originalIndex = originalIndex;
+          return result;
+        });
+        wokSortDirection = null;
+        updateSortButtons();
+        [wokAscBtn, wokDescBtn, resetSortBtn].forEach(button => button.disabled = outputRows.length === 0);
+
+        document.getElementById("totalRows").textContent = sourceRows.length.toLocaleString("id-ID");
+        document.getElementById("hwaRows").textContent = outputRows.length.toLocaleString("id-ID");
+        fileInfo.textContent = `File: ${file.name} · Sheet: ${sheetName}`;
+        searchInput.disabled = false;
+        copyBtn.disabled = outputRows.length === 0;
+        copyImageBtn.disabled = outputRows.length === 0;
+        exportBtn.disabled = outputRows.length === 0;
+        searchInput.value = "";
+        renderTable(outputRows);
+        showMessage(`Berhasil memproses ${sourceRows.length.toLocaleString("id-ID")} baris; ditemukan ${outputRows.length.toLocaleString("id-ID")} baris dengan package_cat = HWA.`, "success");
+      } catch (error) {
+        sourceRows = [];
+        filteredRows = [];
+        outputRows = [];
+        document.getElementById("totalRows").textContent = "—";
+        document.getElementById("hwaRows").textContent = "—";
+        searchInput.disabled = true;
+        copyBtn.disabled = true;
+        copyImageBtn.disabled = true;
+        exportBtn.disabled = true;
+        [wokAscBtn, wokDescBtn, resetSortBtn].forEach(button => button.disabled = true);
+        wokSortDirection = null;
+        updateSortButtons();
+        renderTable([]);
+        showMessage(error.message || "File gagal diproses. Periksa format dan header kolom.", "error");
+        fileInfo.textContent = "File: " + file.name;
+      }
+    }
+
+    function compareWok(a, b) {
+      const av = formatValue(a.wok).trim();
+      const bv = formatValue(b.wok).trim();
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return av.localeCompare(bv, "id-ID", { numeric: true, sensitivity: "base" });
+    }
+
+    function getSortedRows(rows) {
+      const result = [...rows];
+      if (wokSortDirection === "asc") {
+        result.sort((a, b) => compareWok(a, b) || a.__originalIndex - b.__originalIndex);
+      } else if (wokSortDirection === "desc") {
+        result.sort((a, b) => compareWok(b, a) || a.__originalIndex - b.__originalIndex);
+      } else {
+        result.sort((a, b) => a.__originalIndex - b.__originalIndex);
+      }
+      return result;
+    }
+
+    function updateSortButtons() {
+      wokAscBtn.classList.toggle("active", wokSortDirection === "asc");
+      wokDescBtn.classList.toggle("active", wokSortDirection === "desc");
+      resetSortBtn.classList.toggle("active", wokSortDirection === null);
+    }
+
+    function renderTable(rows) {
+      const query = searchInput.value.trim().toLocaleLowerCase("id-ID");
+      const sortedRows = getSortedRows(rows);
+      const visibleRows = query
+        ? sortedRows.filter(row => OUTPUT_COLUMNS.some(column => formatValue(row[column]).toLocaleLowerCase("id-ID").includes(query)))
+        : sortedRows;
+
+      document.getElementById("shownCount").textContent =
+        `${visibleRows.length.toLocaleString("id-ID")} baris ditampilkan`;
+
+      if (!visibleRows.length) {
+        tableWrap.innerHTML = `<div class="empty"><div class="empty-icon">⌕</div><strong>${outputRows.length ? "Tidak ada data yang cocok" : "Tidak ada baris HWA"}</strong><div style="margin-top:7px;font-size:12px">${outputRows.length ? "Coba kata kunci pencarian lain." : "File berhasil dibaca, tetapi tidak ditemukan nilai package_cat = HWA."}</div></div>`;
+        return;
+      }
+
+      const thead = `<thead><tr>${OUTPUT_COLUMNS.map(col => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>`;
+      const tbody = `<tbody>${visibleRows.map(row => `<tr>${OUTPUT_COLUMNS.map(col => `<td title="${escapeHtml(formatValue(row[col]))}">${escapeHtml(formatValue(row[col]))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      tableWrap.innerHTML = `<table id="resultTable">${thead}${tbody}</table>`;
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[char]);
+    }
+
+    function exportExcel() {
+      if (!outputRows.length) return;
+      const ws = XLSX.utils.json_to_sheet(outputRows, { header: OUTPUT_COLUMNS });
+      ws["!cols"] = OUTPUT_COLUMNS.map(col => ({ wch: Math.min(Math.max(col.length + 2, 14), 32) }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "HWA Filter");
+      const baseName = currentFileName.replace(/\.[^.]+$/, "").replace(/[\\/:*?"<>|]/g, "_");
+      XLSX.writeFile(wb, `${baseName}_HWA_Filter.xlsx`);
+    }
+
+    async function copyTable() {
+      if (!outputRows.length) return;
+      const query = searchInput.value.trim().toLocaleLowerCase("id-ID");
+      const rows = query
+        ? outputRows.filter(row => OUTPUT_COLUMNS.some(col => formatValue(row[col]).toLocaleLowerCase("id-ID").includes(query)))
+        : outputRows;
+      const lines = [
+        OUTPUT_COLUMNS.join("\t"),
+        ...rows.map(row => OUTPUT_COLUMNS.map(col => formatValue(row[col]).replace(/\t|\r?\n/g, " ")).join("\t"))
+      ];
+      try {
+        await navigator.clipboard.writeText(lines.join("\n"));
+        showMessage(`${rows.length.toLocaleString("id-ID")} baris berhasil disalin ke clipboard.`, "success");
+      } catch {
+        showMessage("Browser menolak akses clipboard. Gunakan Ekspor Excel atau buka aplikasi melalui localhost/HTTPS untuk menyalin tabel.", "error");
+      }
+    }
+
+    async function copyTableAsImage() {
+      if (!outputRows.length) return;
+      if (typeof html2canvas !== "function") {
+        showMessage("Library gambar belum termuat. Periksa koneksi internet lalu coba kembali.", "error");
+        return;
+      }
+
+      const query = searchInput.value.trim().toLocaleLowerCase("id-ID");
+      const rows = getSortedRows(outputRows).filter(row =>
+        !query || OUTPUT_COLUMNS.some(col => formatValue(row[col]).toLocaleLowerCase("id-ID").includes(query))
+      );
+      if (!rows.length) {
+        showMessage("Tidak ada baris yang dapat disalin untuk pencarian ini.", "error");
+        return;
+      }
+
+      copyImageBtn.disabled = true;
+      const oldLabel = copyImageBtn.textContent;
+      copyImageBtn.textContent = "Membuat gambar…";
+      const stage = document.createElement("div");
+      stage.className = "capture-stage";
+      const title = document.createElement("div");
+      title.textContent = "HWA Data Filter";
+      title.style.cssText = "font:700 20px Arial,sans-serif;color:#202938;margin-bottom:6px";
+      const subtitle = document.createElement("div");
+      subtitle.textContent = `${rows.length.toLocaleString("id-ID")} baris · package_cat = HWA`;
+      subtitle.style.cssText = "font:12px Arial,sans-serif;color:#657386;margin-bottom:16px";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      OUTPUT_COLUMNS.forEach(col => {
+        const th = document.createElement("th");
+        th.textContent = col;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      const tbody = document.createElement("tbody");
+      rows.forEach(row => {
+        const tr = document.createElement("tr");
+        OUTPUT_COLUMNS.forEach(col => {
+          const td = document.createElement("td");
+          td.textContent = formatValue(row[col]);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      table.append(thead, tbody);
+      stage.append(title, subtitle, table);
+      document.body.appendChild(stage);
+
+      try {
+        const canvas = await html2canvas(stage, {
+          backgroundColor: "#ffffff",
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          width: stage.scrollWidth,
+          height: stage.scrollHeight,
+          windowWidth: Math.max(document.documentElement.clientWidth, stage.scrollWidth)
+        });
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw new Error("Gambar gagal dibuat.");
+
+        try {
+          if (!navigator.clipboard || typeof ClipboardItem === "undefined") throw new Error("Clipboard gambar tidak didukung browser ini.");
+          await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+          showMessage(`Tabel berhasil disalin sebagai gambar (${rows.length.toLocaleString("id-ID")} baris). Anda bisa menempelkannya dengan Ctrl+V.`, "success");
+        } catch (clipboardError) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          const baseName = currentFileName.replace(/\.[^.]+$/, "").replace(/[\\/:*?"<>|]/g, "_");
+          a.href = url;
+          a.download = `${baseName || "HWA"}_Tabel.png`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1500);
+          showMessage("Browser tidak mengizinkan salin gambar langsung, jadi gambar tabel diunduh sebagai PNG. Anda dapat menyalin gambar tersebut dari file hasil unduhan.", "success");
+        }
+      } catch (error) {
+        showMessage(error.message || "Gagal membuat gambar tabel. Coba lagi dengan jumlah baris lebih sedikit.", "error");
+      } finally {
+        stage.remove();
+        copyImageBtn.disabled = outputRows.length === 0;
+        copyImageBtn.textContent = oldLabel;
+      }
+    }
+
+    chooseBtn.addEventListener("click", event => {
+      event.stopPropagation();
+      fileInput.click();
+    });
+    dropzone.addEventListener("click", event => {
+      if (event.target !== chooseBtn) fileInput.click();
+    });
+    dropzone.addEventListener("keydown", event => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+    fileInput.addEventListener("change", event => {
+      processFile(event.target.files[0]);
+      fileInput.value = "";
+    });
+    ["dragenter", "dragover"].forEach(type => dropzone.addEventListener(type, event => {
+      event.preventDefault();
+      dropzone.classList.add("dragover");
+    }));
+    ["dragleave", "drop"].forEach(type => dropzone.addEventListener(type, event => {
+      event.preventDefault();
+      dropzone.classList.remove("dragover");
+    }));
+    dropzone.addEventListener("drop", event => {
+      const file = event.dataTransfer.files[0];
+      processFile(file);
+    });
+    searchInput.addEventListener("input", () => renderTable(outputRows));
+    wokAscBtn.addEventListener("click", () => { wokSortDirection = "asc"; updateSortButtons(); renderTable(outputRows); });
+    wokDescBtn.addEventListener("click", () => { wokSortDirection = "desc"; updateSortButtons(); renderTable(outputRows); });
+    resetSortBtn.addEventListener("click", () => { wokSortDirection = null; updateSortButtons(); renderTable(outputRows); });
+    exportBtn.addEventListener("click", exportExcel);
+    copyBtn.addEventListener("click", copyTable);
+    copyImageBtn.addEventListener("click", copyTableAsImage);
+  </script>
+</body>
+</html>
