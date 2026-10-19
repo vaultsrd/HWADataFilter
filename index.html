@@ -217,7 +217,7 @@
       "wok",
       "product_commercial_name",
       "fallout_reason",
-      "channel_name",
+      "subchannel",
       "sf_code"
     ];
 
@@ -339,7 +339,6 @@
       }
 
       // Serial number Excel — konversi langsung selama di rentang wajar serial tanggal.
-      // Ini menangani kasus kolom tanggal yang tidak terdeteksi oleh dateColumns.
       if (isExcelSerialDate(value)) {
         const dt = excelSerialToDate(value);
         if (dt) return formatDateDDMMYYYY(dt);
@@ -356,10 +355,6 @@
 
     /**
      * Deteksi kolom tanggal dari header & sampel data.
-     * - Header mengandung kata kunci tanggal
-     * - Sampel berisi Date object
-     * - Sampel berisi string tanggal valid
-     * - Sampel berisi serial number Excel di rentang wajar
      */
     function detectDateColumns(columns, rows) {
       const result = new Set();
@@ -380,7 +375,6 @@
           else if (typeof v === "string" && parseDateString(v)) { dateHits++; }
         }
 
-        // Jika mayoritas sampel yang terisi terdeteksi sebagai tanggal → kolom tanggal
         if (checked > 0 && dateHits / checked >= 0.6) {
           result.add(col);
         }
