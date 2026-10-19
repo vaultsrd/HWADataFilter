@@ -64,6 +64,15 @@
     .search { width:min(360px,100%); border:1px solid var(--border); border-radius:10px; padding:10px 12px; outline:none; font:inherit; font-size:13px; }
     .search:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(27,207,180,.13); }
     .count { color:var(--muted); font-size:12px; white-space:nowrap; }
+    .column-picker { padding:14px 22px; border-bottom:1px solid var(--border); background:#fcfefd; }
+    .column-picker-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px; }
+    .column-picker-title { font-size:12px; font-weight:800; }
+    .column-picker-note { font-size:11px; color:var(--muted); margin-top:3px; }
+    .column-picker-actions { display:flex; gap:7px; flex-wrap:wrap; }
+    .column-list { display:flex; flex-wrap:wrap; gap:8px; }
+    .column-option { display:inline-flex; align-items:center; gap:7px; padding:7px 10px; border:1px solid var(--border); border-radius:9px; background:#fff; font-size:12px; cursor:pointer; }
+    .column-option:has(input:checked) { border-color:#8ce4d7; background:#eafffb; }
+    .column-option input { accent-color:#087f70; margin:0; }
     .table-wrap { width:100%; overflow:auto; max-height:62vh; }
     table { border-collapse:separate; border-spacing:0; width:100%; min-width:1000px; font-size:12px; }
     thead th { position:sticky; top:0; z-index:1; background:var(--accent); color:#073d36; text-align:left; padding:13px 14px; font-size:11px; letter-spacing:.15px; white-space:normal; overflow-wrap:anywhere; border-bottom:1px solid rgba(0,0,0,.06); }
@@ -72,7 +81,7 @@
     tbody tr:hover { background:#edfcf9; }
     .empty { padding:48px 20px; text-align:center; color:var(--muted); }
     .table-footer-actions { display:flex; justify-content:flex-end; padding:16px 22px; border-top:1px solid var(--border); background:#fff; }
-    .capture-stage { position:fixed; left:-100000px; top:0; z-index:-1; background:#fff; padding:24px; width:max-content; max-width:none; }
+    .capture-stage { position:fixed; left:-100000px; top:0; z-index:-1; background:#fff; padding:0; width:max-content; max-width:none; }
     .capture-stage table { width:auto; min-width:1100px; max-width:none; table-layout:auto; border-collapse:collapse; font-size:13px; }
     .capture-stage th { background:#1bcfb4; color:#073d36; text-align:left; padding:12px 14px; border:1px solid #b7dcd6; white-space:normal; overflow-wrap:anywhere; word-break:normal; }
     .capture-stage td { padding:10px 14px; border:1px solid #dfe8e7; white-space:normal; overflow-wrap:anywhere; word-break:normal; vertical-align:middle; max-width:480px; }
@@ -82,6 +91,9 @@
     .message { display:none; border-radius:10px; padding:11px 13px; font-size:13px; margin-top:12px; }
     .message.error { display:block; color:#9b2c2c; background:#fff0f0; border:1px solid #ffd6d6; }
     .message.success { display:block; color:#126b5f; background:#eafffb; border:1px solid #b6eee5; }
+    .toggle-columns-btn { display:inline-flex; align-items:center; gap:6px; }
+    .toggle-columns-btn .chevron { transition:transform .2s ease; display:inline-block; }
+    .toggle-columns-btn.collapsed .chevron { transform:rotate(-90deg); }
     @media (max-width:700px) {
       .app { padding:16px; }
       .topbar { align-items:flex-start; }
@@ -137,8 +149,8 @@
       </div>
       <div class="panel stat">
         <div class="stat-label">KOLOM OUTPUT</div>
-        <div class="stat-value">7</div>
-        <div class="stat-note">Kolom ditampilkan sesuai urutan yang ditentukan</div>
+        <div class="stat-value" id="selectedColumnCount">7</div>
+        <div class="stat-note">Jumlah kolom yang dipilih untuk output</div>
       </div>
     </section>
 
@@ -162,6 +174,28 @@
         <input id="searchInput" class="search" type="search" placeholder="Cari di hasil tabel..." disabled>
         <div class="count" id="shownCount">Belum ada data</div>
       </div>
+
+      <!-- Toggle button for column picker (default: collapsed) -->
+      <div style="padding:10px 22px; border-bottom:1px solid var(--border); background:#fff; display:flex; justify-content:flex-start;">
+        <button type="button" class="btn btn-secondary toggle-columns-btn collapsed" id="toggleColumnsBtn" aria-expanded="false" aria-controls="columnPicker">
+          <span class="chevron">▾</span> Pilih Kolom yang Ditampilkan
+        </button>
+      </div>
+
+      <div class="column-picker" id="columnPicker" hidden>
+        <div class="column-picker-head">
+          <div>
+            <div class="column-picker-title">Pilih Kolom yang Ditampilkan</div>
+            <div class="column-picker-note">Kolom output standar otomatis tercentang. Centang atau hapus centang sesuai kebutuhan.</div>
+          </div>
+          <div class="column-picker-actions">
+            <button type="button" class="btn btn-secondary" id="selectAllColumnsBtn">Pilih Semua</button>
+            <button type="button" class="btn btn-secondary" id="defaultColumnsBtn">Kolom Default</button>
+          </div>
+        </div>
+        <div class="column-list" id="columnList"></div>
+      </div>
+
       <div class="table-wrap" id="tableWrap">
         <div class="empty">
           <div class="empty-icon">▤</div>
@@ -200,12 +234,24 @@
     const wokAscBtn = document.getElementById("wokAscBtn");
     const wokDescBtn = document.getElementById("wokDescBtn");
     const resetSortBtn = document.getElementById("resetSortBtn");
+    const columnPicker = document.getElementById("columnPicker");
+    const columnList = document.getElementById("columnList");
+    const selectAllColumnsBtn = document.getElementById("selectAllColumnsBtn");
+    const defaultColumnsBtn = document.getElementById("defaultColumnsBtn");
+    const toggleColumnsBtn = document.getElementById("toggleColumnsBtn");
 
     let sourceRows = [];
     let filteredRows = [];
     let outputRows = [];
     let currentFileName = "";
-    let wokSortDirection = null; // null = urutan asli, asc = ascending, desc = descending
+    let wokSortDirection = null;
+    let availableColumns = [];
+    let selectedColumns = [];
+    let dateColumns = new Set();
+
+    // Rentang serial tanggal Excel yang wajar: ~1954-01-01 s/d ~2119-12-31
+    const EXCEL_SERIAL_MIN = 20000;
+    const EXCEL_SERIAL_MAX = 80000;
 
     function normalizeHeader(value) {
       return String(value ?? "").replace(/^\uFEFF/, "").trim().toLowerCase();
@@ -227,10 +273,120 @@
       return actualKey === undefined ? "" : (row[actualKey] ?? "");
     }
 
-    function formatValue(value) {
+    function formatDateDDMMYYYY(date) {
+      const d = String(date.getDate()).padStart(2, "0");
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const y = date.getFullYear();
+      return `${d}/${m}/${y}`;
+    }
+
+    function isExcelSerialDate(value) {
+      return typeof value === "number" && isFinite(value) &&
+             value >= EXCEL_SERIAL_MIN && value <= EXCEL_SERIAL_MAX;
+    }
+
+    function excelSerialToDate(serial) {
+      const dt = XLSX.SSF.parse_date_code(serial);
+      if (!dt) return null;
+      const jsDate = new Date(dt.y, dt.m - 1, dt.d);
+      return isNaN(jsDate.getTime()) ? null : jsDate;
+    }
+
+    /**
+     * Parse string tanggal. Mendukung:
+     * - m/d/yy, m/d/yyyy (format Excel default)
+     * - dd/mm/yyyy, d/m/yyyy
+     * - yyyy-mm-dd, yyyy/mm/dd
+     */
+    function parseDateString(str) {
+      if (!str) return null;
+      const s = String(str).trim();
+      if (!s) return null;
+
+      // ISO: YYYY-MM-DD / YYYY/MM/DD
+      let m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s].*)?$/);
+      if (m) {
+        const y = Number(m[1]), mo = Number(m[2]) - 1, d = Number(m[3]);
+        const dt = new Date(y, mo, d);
+        if (dt.getFullYear() === y && dt.getMonth() === mo && dt.getDate() === d) return dt;
+      }
+
+      // d/m/yy atau d/m/yyyy atau m/d/yy dst.
+      m = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+      if (m) {
+        let a = Number(m[1]), b = Number(m[2]), y = Number(m[3]);
+        if (y < 100) y += y >= 70 ? 1900 : 2000;
+        let d, mo;
+        if (a > 12 && b <= 12) { d = a; mo = b; }
+        else if (b > 12 && a <= 12) { d = b; mo = a; }
+        else { d = a; mo = b; } // default dd/mm
+        const dt = new Date(y, mo - 1, d);
+        if (dt.getFullYear() === y && dt.getMonth() === mo - 1 && dt.getDate() === d) return dt;
+      }
+
+      return null;
+    }
+
+    /**
+     * Format nilai sel. Serial number Excel dan Date object dikonversi ke dd/mm/yyyy.
+     */
+    function formatValue(value, columnName) {
       if (value === null || value === undefined) return "";
-      if (value instanceof Date) return value.toLocaleDateString("id-ID");
+
+      // Date object
+      if (value instanceof Date && !isNaN(value.getTime())) {
+        return formatDateDDMMYYYY(value);
+      }
+
+      // Serial number Excel — konversi langsung selama di rentang wajar serial tanggal.
+      // Ini menangani kasus kolom tanggal yang tidak terdeteksi oleh dateColumns.
+      if (isExcelSerialDate(value)) {
+        const dt = excelSerialToDate(value);
+        if (dt) return formatDateDDMMYYYY(dt);
+      }
+
+      // String tanggal
+      const str = String(value).trim();
+      if (str) {
+        const parsed = parseDateString(str);
+        if (parsed) return formatDateDDMMYYYY(parsed);
+      }
       return String(value);
+    }
+
+    /**
+     * Deteksi kolom tanggal dari header & sampel data.
+     * - Header mengandung kata kunci tanggal
+     * - Sampel berisi Date object
+     * - Sampel berisi string tanggal valid
+     * - Sampel berisi serial number Excel di rentang wajar
+     */
+    function detectDateColumns(columns, rows) {
+      const result = new Set();
+      const headerKeywords = /(date|tanggal|tgl|waktu|time|created|updated|submit|order_date|tgl_order)/i;
+
+      columns.forEach(col => {
+        if (headerKeywords.test(col)) { result.add(col); return; }
+
+        let checked = 0;
+        let dateHits = 0;
+        for (let i = 0; i < rows.length && checked < 30; i++) {
+          const v = rows[i][col];
+          if (v === "" || v === null || v === undefined) continue;
+          checked++;
+
+          if (v instanceof Date && !isNaN(v.getTime())) { dateHits++; }
+          else if (isExcelSerialDate(v)) { dateHits++; }
+          else if (typeof v === "string" && parseDateString(v)) { dateHits++; }
+        }
+
+        // Jika mayoritas sampel yang terisi terdeteksi sebagai tanggal → kolom tanggal
+        if (checked > 0 && dateHits / checked >= 0.6) {
+          result.add(col);
+        }
+      });
+
+      return result;
     }
 
     async function processFile(file) {
@@ -260,11 +416,16 @@
         if (!workbook.SheetNames.length) throw new Error("File tidak memiliki sheet yang dapat dibaca.");
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false });
+
+        // raw: true agar nilai tanggal tetap Date/serial, bukan string locale Excel
+        const rows = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: true });
 
         if (!rows.length) {
           sourceRows = [];
           outputRows = [];
+          availableColumns = []; selectedColumns = []; columnList.innerHTML = "";
+          dateColumns = new Set();
+          closeColumnPicker();
           document.getElementById("totalRows").textContent = "0";
           document.getElementById("hwaRows").textContent = "0";
           copyBtn.disabled = true; copyImageBtn.disabled = true; exportBtn.disabled = true; searchInput.disabled = true;
@@ -273,17 +434,24 @@
           return;
         }
 
-        const headerKeys = Object.keys(rows[0]).map(normalizeHeader);
-        const missing = ["package_cat", ...OUTPUT_COLUMNS].filter(name => !headerKeys.includes(normalizeHeader(name)));
-        if (missing.length) {
-          throw new Error("Kolom wajib tidak ditemukan: " + missing.join(", ") + ". Pastikan nama header sesuai dan berada di baris pertama sheet.");
+        availableColumns = Object.keys(rows[0]);
+        dateColumns = detectDateColumns(availableColumns, rows);
+
+        const headerKeys = availableColumns.map(normalizeHeader);
+        if (!headerKeys.includes("package_cat")) {
+          throw new Error("Kolom wajib tidak ditemukan: package_cat. Kolom ini diperlukan untuk memfilter data HWA.");
         }
+
+        selectedColumns = OUTPUT_COLUMNS.map(column => availableColumns.find(name => normalizeHeader(name) === normalizeHeader(column))).filter(Boolean);
+        renderColumnPicker();
+        // Pastikan panel tetap tertutup setelah upload — user harus klik toggle
+        closeColumnPicker();
 
         sourceRows = rows;
         filteredRows = rows.filter(row => String(getCell(row, "package_cat")).trim().toUpperCase() === "HWA");
         outputRows = filteredRows.map((row, originalIndex) => {
           const result = {};
-          OUTPUT_COLUMNS.forEach(column => result[column] = getCell(row, column));
+          availableColumns.forEach(column => result[column] = getCell(row, column));
           result.__originalIndex = originalIndex;
           return result;
         });
@@ -305,6 +473,9 @@
         sourceRows = [];
         filteredRows = [];
         outputRows = [];
+        availableColumns = []; selectedColumns = []; columnList.innerHTML = "";
+        dateColumns = new Set();
+        closeColumnPicker();
         document.getElementById("totalRows").textContent = "—";
         document.getElementById("hwaRows").textContent = "—";
         searchInput.disabled = true;
@@ -321,8 +492,8 @@
     }
 
     function compareWok(a, b) {
-      const av = formatValue(a.wok).trim();
-      const bv = formatValue(b.wok).trim();
+      const av = formatValue(getCell(a, "wok"), "wok").trim();
+      const bv = formatValue(getCell(b, "wok"), "wok").trim();
       if (!av && !bv) return 0;
       if (!av) return 1;
       if (!bv) return -1;
@@ -351,7 +522,7 @@
       const query = searchInput.value.trim().toLocaleLowerCase("id-ID");
       const sortedRows = getSortedRows(rows);
       const visibleRows = query
-        ? sortedRows.filter(row => OUTPUT_COLUMNS.some(column => formatValue(row[column]).toLocaleLowerCase("id-ID").includes(query)))
+        ? sortedRows.filter(row => selectedColumns.some(column => formatValue(row[column], column).toLocaleLowerCase("id-ID").includes(query)))
         : sortedRows;
 
       document.getElementById("shownCount").textContent =
@@ -362,8 +533,8 @@
         return;
       }
 
-      const thead = `<thead><tr>${OUTPUT_COLUMNS.map(col => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>`;
-      const tbody = `<tbody>${visibleRows.map(row => `<tr>${OUTPUT_COLUMNS.map(col => `<td title="${escapeHtml(formatValue(row[col]))}">${escapeHtml(formatValue(row[col]))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+      const thead = `<thead><tr>${selectedColumns.map(col => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>`;
+      const tbody = `<tbody>${visibleRows.map(row => `<tr>${selectedColumns.map(col => `<td title="${escapeHtml(formatValue(row[col], col))}">${escapeHtml(formatValue(row[col], col))}</td>`).join("")}</tr>`).join("")}</tbody>`;
       tableWrap.innerHTML = `<table id="resultTable">${thead}${tbody}</table>`;
     }
 
@@ -375,8 +546,15 @@
 
     function exportExcel() {
       if (!outputRows.length) return;
-      const ws = XLSX.utils.json_to_sheet(outputRows, { header: OUTPUT_COLUMNS });
-      ws["!cols"] = OUTPUT_COLUMNS.map(col => ({ wch: Math.min(Math.max(col.length + 2, 14), 32) }));
+      const exportRows = outputRows.map(row => {
+        const out = {};
+        selectedColumns.forEach(col => {
+          out[col] = formatValue(row[col], col);
+        });
+        return out;
+      });
+      const ws = XLSX.utils.json_to_sheet(exportRows, { header: selectedColumns });
+      ws["!cols"] = selectedColumns.map(col => ({ wch: Math.min(Math.max(col.length + 2, 14), 32) }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "HWA Filter");
       const baseName = currentFileName.replace(/\.[^.]+$/, "").replace(/[\\/:*?"<>|]/g, "_");
@@ -387,11 +565,11 @@
       if (!outputRows.length) return;
       const query = searchInput.value.trim().toLocaleLowerCase("id-ID");
       const rows = query
-        ? outputRows.filter(row => OUTPUT_COLUMNS.some(col => formatValue(row[col]).toLocaleLowerCase("id-ID").includes(query)))
+        ? outputRows.filter(row => selectedColumns.some(col => formatValue(row[col], col).toLocaleLowerCase("id-ID").includes(query)))
         : outputRows;
       const lines = [
-        OUTPUT_COLUMNS.join("\t"),
-        ...rows.map(row => OUTPUT_COLUMNS.map(col => formatValue(row[col]).replace(/\t|\r?\n/g, " ")).join("\t"))
+        selectedColumns.join("\t"),
+        ...rows.map(row => selectedColumns.map(col => formatValue(row[col], col).replace(/\t|\r?\n/g, " ")).join("\t"))
       ];
       try {
         await navigator.clipboard.writeText(lines.join("\n"));
@@ -402,7 +580,7 @@
     }
 
     async function copyTableAsImage() {
-      if (!outputRows.length) return;
+      if (!outputRows.length || !selectedColumns.length) return;
       if (typeof html2canvas !== "function") {
         showMessage("Library gambar belum termuat. Periksa koneksi internet lalu coba kembali.", "error");
         return;
@@ -410,7 +588,7 @@
 
       const query = searchInput.value.trim().toLocaleLowerCase("id-ID");
       const rows = getSortedRows(outputRows).filter(row =>
-        !query || OUTPUT_COLUMNS.some(col => formatValue(row[col]).toLocaleLowerCase("id-ID").includes(query))
+        !query || selectedColumns.some(col => formatValue(row[col], col).toLocaleLowerCase("id-ID").includes(query))
       );
       if (!rows.length) {
         showMessage("Tidak ada baris yang dapat disalin untuk pencarian ini.", "error");
@@ -422,16 +600,10 @@
       copyImageBtn.textContent = "Membuat gambar…";
       const stage = document.createElement("div");
       stage.className = "capture-stage";
-      const title = document.createElement("div");
-      title.textContent = "HWA Data Filter";
-      title.style.cssText = "font:700 20px Arial,sans-serif;color:#202938;margin-bottom:6px";
-      const subtitle = document.createElement("div");
-      subtitle.textContent = `${rows.length.toLocaleString("id-ID")} baris · package_cat = HWA`;
-      subtitle.style.cssText = "font:12px Arial,sans-serif;color:#657386;margin-bottom:16px";
       const table = document.createElement("table");
       const thead = document.createElement("thead");
       const headerRow = document.createElement("tr");
-      OUTPUT_COLUMNS.forEach(col => {
+      selectedColumns.forEach(col => {
         const th = document.createElement("th");
         th.textContent = col;
         headerRow.appendChild(th);
@@ -440,15 +612,15 @@
       const tbody = document.createElement("tbody");
       rows.forEach(row => {
         const tr = document.createElement("tr");
-        OUTPUT_COLUMNS.forEach(col => {
+        selectedColumns.forEach(col => {
           const td = document.createElement("td");
-          td.textContent = formatValue(row[col]);
+          td.textContent = formatValue(row[col], col);
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
       });
       table.append(thead, tbody);
-      stage.append(title, subtitle, table);
+      stage.appendChild(table);
       document.body.appendChild(stage);
 
       try {
@@ -478,15 +650,40 @@
           a.click();
           a.remove();
           setTimeout(() => URL.revokeObjectURL(url), 1500);
-          showMessage("Browser tidak mengizinkan salin gambar langsung, jadi gambar tabel diunduh sebagai PNG. Anda dapat menyalin gambar tersebut dari file hasil unduhan.", "success");
+          showMessage("Browser tidak mengizinkan salin gambar langsung, jadi gambar tabel diunduh sebagai PNG.", "success");
         }
       } catch (error) {
         showMessage(error.message || "Gagal membuat gambar tabel. Coba lagi dengan jumlah baris lebih sedikit.", "error");
       } finally {
         stage.remove();
-        copyImageBtn.disabled = outputRows.length === 0;
+        copyImageBtn.disabled = outputRows.length === 0 || selectedColumns.length === 0;
         copyImageBtn.textContent = oldLabel;
       }
+    }
+
+    function renderColumnPicker() {
+      // JANGAN mengubah columnPicker.hidden di sini — panel hanya dibuka lewat toggle.
+      columnList.innerHTML = availableColumns.map(column => {
+        const checked = selectedColumns.some(name => normalizeHeader(name) === normalizeHeader(column));
+        return `<label class="column-option"><input type="checkbox" data-column="${escapeHtml(column)}" ${checked ? "checked" : ""}><span>${escapeHtml(column)}</span></label>`;
+      }).join("");
+      document.getElementById("selectedColumnCount").textContent = selectedColumns.length.toLocaleString("id-ID");
+    }
+
+    function closeColumnPicker() {
+      columnPicker.hidden = true;
+      toggleColumnsBtn.classList.add("collapsed");
+      toggleColumnsBtn.setAttribute("aria-expanded", "false");
+    }
+
+    function updateSelectedColumns() {
+      selectedColumns = [...columnList.querySelectorAll('input[type="checkbox"]:checked')]
+        .map(input => input.dataset.column);
+      document.getElementById("selectedColumnCount").textContent = selectedColumns.length.toLocaleString("id-ID");
+      copyBtn.disabled = outputRows.length === 0 || selectedColumns.length === 0;
+      copyImageBtn.disabled = outputRows.length === 0 || selectedColumns.length === 0;
+      exportBtn.disabled = outputRows.length === 0 || selectedColumns.length === 0;
+      renderTable(outputRows);
     }
 
     chooseBtn.addEventListener("click", event => {
@@ -519,12 +716,36 @@
       processFile(file);
     });
     searchInput.addEventListener("input", () => renderTable(outputRows));
+    columnList.addEventListener("change", updateSelectedColumns);
+    selectAllColumnsBtn.addEventListener("click", () => {
+      selectedColumns = [...availableColumns];
+      renderColumnPicker();
+      renderTable(outputRows);
+      updateSelectedColumns();
+    });
+    defaultColumnsBtn.addEventListener("click", () => {
+      selectedColumns = OUTPUT_COLUMNS.map(column => availableColumns.find(name => normalizeHeader(name) === normalizeHeader(column))).filter(Boolean);
+      renderColumnPicker();
+      renderTable(outputRows);
+      updateSelectedColumns();
+    });
     wokAscBtn.addEventListener("click", () => { wokSortDirection = "asc"; updateSortButtons(); renderTable(outputRows); });
     wokDescBtn.addEventListener("click", () => { wokSortDirection = "desc"; updateSortButtons(); renderTable(outputRows); });
     resetSortBtn.addEventListener("click", () => { wokSortDirection = null; updateSortButtons(); renderTable(outputRows); });
     exportBtn.addEventListener("click", exportExcel);
     copyBtn.addEventListener("click", copyTable);
     copyImageBtn.addEventListener("click", copyTableAsImage);
+
+    // Toggle panel pilih kolom — satu-satunya jalan membuka panel
+    toggleColumnsBtn.addEventListener("click", () => {
+      const willShow = columnPicker.hidden;
+      columnPicker.hidden = !willShow;
+      toggleColumnsBtn.classList.toggle("collapsed", !willShow);
+      toggleColumnsBtn.setAttribute("aria-expanded", String(willShow));
+    });
+
+    // Pastikan panel tertutup saat halaman pertama dimuat
+    closeColumnPicker();
   </script>
 </body>
 </html>
